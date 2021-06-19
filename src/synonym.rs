@@ -1,5 +1,7 @@
 pub mod providers {
     pub mod thesaurus;
+    mod base;
+
     pub mod merriam_webster {
         const BASE_URL: &str = "https://www.merriam-webster.com/thesaurus/";
 
@@ -50,3 +52,4 @@ pub mod providers {
         }
     }
 }
+
