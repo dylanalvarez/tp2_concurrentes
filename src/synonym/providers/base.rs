@@ -1,13 +1,15 @@
 use reqwest::header::USER_AGENT;
-use crate::synonym::providers::thesaurus;
+use crate::synonym::providers::{thesaurus, merriam_webster};
 
 pub enum Provider {
-    Thesaurus
+    Thesaurus,
+    MerriamWebster
 }
 
 pub fn synonyms(word: &str, provider: Provider) -> Vec<String> {
     let base_url = match provider {
-        Provider::Thesaurus => "https://thesaurus.yourdictionary.com/"
+        Provider::Thesaurus => "https://thesaurus.yourdictionary.com/",
+        Provider::MerriamWebster => "https://www.merriam-webster.com/thesaurus/"
     };
     let synonyms = match fetch_synonyms_raw_response(word, base_url) {
         Err(e) => {
@@ -17,7 +19,8 @@ pub fn synonyms(word: &str, provider: Provider) -> Vec<String> {
         }
         Ok(response_body) => {
             match provider {
-                Provider::Thesaurus => thesaurus::raw_response_to_synonyms(response_body)
+                Provider::Thesaurus => thesaurus::raw_response_to_synonyms(response_body),
+                Provider::MerriamWebster => merriam_webster::raw_response_to_synonyms(response_body)
             }
         }
     };
