@@ -36,3 +36,25 @@ impl SingleSynonym {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::{read_to_string}, path::Path};
+
+    use super::*;
+    #[test]
+    fn test_single_synonym() {
+        let path = Path::new("src/synonym/providers/tests/single_synonym.html");
+        match read_to_string(path) {
+            Err(e) => {
+                print!("{:?}", e);
+                panic!("Cant open file");
+            }
+
+            Ok(raw_html) => {
+                let result = SingleSynonym {raw_html: raw_html}.get_synonym();
+                assert_eq!(result, "motor-car")
+            }
+        };
+    }
+}
