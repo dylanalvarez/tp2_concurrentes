@@ -1,4 +1,5 @@
 pub mod providers {
+    pub mod thesaurus;
     pub mod merriam_webster {
         const BASE_URL: &str = "https://www.merriam-webster.com/thesaurus/";
 
