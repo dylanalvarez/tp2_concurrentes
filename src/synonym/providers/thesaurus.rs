@@ -1,11 +1,11 @@
 use crate::synonym::providers::base::Provider::Thesaurus;
 use crate::synonym::providers::base;
 
-pub fn synonyms(word: &str) -> Vec<String> {
+pub fn synonyms(word: &str) -> Result<Vec<String>, String> {
     return base::synonyms(word, Thesaurus);
 }
 
-pub fn raw_response_to_synonyms(raw_response: String) -> Vec<String> {
+pub fn raw_response_to_synonyms(raw_response: String) -> Result<Vec<String>, String> {
     let tmp_synonyms_vec = raw_response.split("<div class=\"single-synonym-wrapper\"").collect::<Vec<&str>>()[1];
     
     let tmp_synonyms_column = tmp_synonyms_vec.split("<").collect::<Vec<&str>>()[1..].join("<");
@@ -15,7 +15,7 @@ pub fn raw_response_to_synonyms(raw_response: String) -> Vec<String> {
             SingleSynonym {raw_html: line.to_string()}.get_synonym()
         }).collect();
     
-    tmp_single_synonyms
+    Ok(tmp_single_synonyms)
 }
 
 #[derive(Debug)]
