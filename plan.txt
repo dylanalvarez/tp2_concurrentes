@@ -1,0 +1,70 @@
+parameters (flags CLI):
+
+    MAX_REQUESTS =
+        Cantidad máxima de pedidos a los sitios web (requests) a procesar de forma concurrente.
+
+    MIN_TIME_BETWEEN_REQUESTS =
+        Tiempo de espera mínimo entre dos invocaciones al mismo sitio de sinónimos.
+
+    LIBRARY =
+        {stdlib, actix}
+
+-------------
+
+parte A:
+
+        (usar Mutex, RwLock, Semáforos (del crate std-semaphore), Channels, Barriers y Condvars)
+
+
+    main (if LIBRARY == stdlib)
+        sem = semaphor(MAX_REQUESTS)
+
+        condvar_webster<se puede?> = true;
+        channel_webster;
+        sleeper_webster
+            channel_webster.recibo_mensaje "arranco request"
+            sleep MIN_TIME_BETWEEN_REQUESTS
+            condvar_webster.se_puede
+            condvar_webster.notify_all
+
+        channel_joiner;
+        result_joiner
+            main_result<{word: {synonym: count}}> = {}
+            channel_joiner.recibo_mensaje {word, synonym}
+                main_result[word][synonym] += 1
+            channel_joiner.recibo_mensaje "ya estan todos"
+                return main_result
+
+        channel_logger;
+        logger
+            channel_logger.recibo_mensaje "logueame esto"
+                escribe al archivo
+            channel_logger.recibo_mensaje "ya estan todos"
+                return
+
+        readlines(file) { |word|
+            main_result[word] = {}
+            spawn get_synonyms(&word, &main_result[word], &sem)
+                spawn(3) fetch(&main_result[word], &sem)
+                    aquire sem
+                    wait while not condvar_webster.se_puede
+                    condvar_webster.se_puede = false
+                    channel_webster.send "arranco request"
+                    request
+                    release sem
+                    channel_joiner.send {word, synonym}
+                join de los 3 fetch
+        }
+        join de get_synonyms para cada word
+        channel_joiner.envio_mensaje "ya estan todos"
+        channel_logger.envio_mensaje "ya estan todos"
+        join result_joiner -> imprimir el result
+
+
+-------------
+
+parte B:
+
+    main (if LIBRARY == actix)
+
+    TODO
