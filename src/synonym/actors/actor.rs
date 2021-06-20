@@ -9,6 +9,10 @@ struct FindSynonyms(String);
 
 #[derive(Message)]
 #[rtype(result = "()")]
+struct ExecuteRequest();
+
+#[derive(Message)]
+#[rtype(result = "()")]
 struct Synonyms(HashMap<String, Vec<String>>); // Nested HashMap
 
 #[derive(Message)]
@@ -43,11 +47,13 @@ impl Handler<FindSynonyms> for Provider {
     type Result = ();
 
     fn handle(&mut self, _msg: FindSynonyms, _ctx: &mut Context<Self>) -> Self::Result {
-        // TODO: evaluar requests en vuelo y tiempo min entre requests
-        // 1. request http
-        // 2. parse html
-        // 3. res_addr.send(Synonyms)
-        // 4. main_addr.send(ProviderFinished)
+    }
+}
+impl Handler<ExecuteRequest> for Provider {
+    type Result = ();
+
+    fn handle(&mut self, _msg: ExecuteRequest, _ctx: &mut Context<Self>) -> Self::Result {
+        return Ok();
     }
 }
 
