@@ -22,4 +22,6 @@ fn main() {
         Ok(_) => {}
         Err(error) => { println!("Error joining: {:?}", error) }
     };
+
+    synonym::actors::actor::main();
 }
