@@ -67,6 +67,111 @@ parte B:
         main_addr = Main.start()
         main_addr.send(Init)
 
-    main (if LIBRARY == actix)
+message Synonyms {
+    (word, synonyms[])
+}
+message FindSynonyms {
+    word
+}
+message Finish {
+}
+message Init {
+}
+message ProviderFinished {
+}
+message InitRequest {
+    provider_addr
+}
+message SendRequest {
+    provider_addr,
+    url,
+    word
+}
 
-    TODO
+// Se deberia iniciar con SyncArbiter::start(MAX_REQUESTS, || HttpRequester);
+// Con eso ya limitaria la cantidad de mensajes procesados por este actor en paralelo
+actor HttpRequester {
+    attribute: result_addr<GlobalResult>
+    attribute: logger_addr<Logger>
+    attribute: main_addr<Main>
+
+    handler<msg: SendRequest> {
+        resp_http = call_http(msg.url, msg.word)
+        resp = parse(resp_http)
+        result_addr.send(Synonyms(resp))
+        main_addr.send(ProviderFinished)
+    }
+}
+
+actor ProviderXCoordinator {
+    attribute: let sleep = tokio::time::sleep(Duration::from_millis(0));
+               tokio::pin!(sleep);
+
+    handler<msg: InitRequest> {
+        tokio::select! {
+            () = &mut sleep => {
+                // Queda bloqueado y entra recien cuando haya pasado el tiempo del sleep
+                msg.provider_addr.send(ExecuteRequest)
+                sleep.as_mut().reset(Instant::now() + Duration::from_millis(MIN_TIME_BETWEEN_REQUESTS));
+            },
+        }
+    }
+}
+
+actor ProviderX {
+    attribute: logger_addr<Logger>
+    attribute: coordinator_addr<ProviderXCoordinator>
+    attribute: http_requester_addr<HttpRequester>
+
+    handler<FindSynonyms> {
+        coordinator_addr.send(InitRequest(self.addr))
+    }
+    handler<ExecuteRequest> {
+        http_requester_addr.send(SendRequest)
+    }
+}
+actor GlobalResult {
+    attribute: synonyms<Hashmap<String, Hashmap<String, int>>>
+
+    handler<msg: Synonyms> {
+        crear/incrementar contadores por cada sinonimo en self.synonyms[msg[word]]
+    }
+    handler<msg: Finish> {
+        print self.synonyms
+    }
+}
+actor Main {
+    attribute: num_words
+    attribute: num_processed_words
+    attribute: num_providers
+    attribute: result_addr
+    attribute: logger_addr
+    attribute: providers_addr
+
+    handler<Init> {
+       res_addr = GlobalResult.start()
+       log_addr = Logger.start()
+       http_requester_addr = SyncArbiter::start(MAX_REQUESTS, || HttpRequester)
+       // Probablemente esto sea un actor Provider con distintos params
+       providers_addr[0] = ProviderX{http_requester_addr, res_addr, log_addr, ctx.addr}.start()
+       providers_addr[1] = ProviderY{http_requester_addr, res_addr, log_addr, ctx.addr}.start()
+       providers_addr[2] = ProviderZ{http_requester_addr, res_addr, log_addr, ctx.addr}.start()
+       num_providers = providers_addr.len()
+
+       readlines(file) { |word|
+            num_words += 1
+            providers_addr[0].send(FindSynonyms(word))
+            providers_addr[1].send(FindSynonyms(word))
+            providers_addr[2].send(FindSynonyms(word))
+       }
+    }
+
+    handler<ProviderFinished> {
+        num_processed_words += 1
+        if (num_words * num_providers == num_processed_words * num_providers) {
+            res_addr.send(Finish)
+        }
+    }
+}
+
+actor Logger {}
