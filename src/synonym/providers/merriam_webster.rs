@@ -1,10 +1,3 @@
-use crate::synonym::providers::base;
-use crate::synonym::providers::base::Provider::MerriamWebster;
-
-pub fn synonyms(word: &str) -> Result<Vec<String>, String> {
-    return base::synonyms(word, MerriamWebster);
-}
-
 // Mejorar esta bosta
 pub fn raw_response_to_synonyms(body_to_scrap: String) -> Result<Vec<String>, String> {
     let mut tmp_synonyms_vec: Vec<&str> = body_to_scrap.rsplit("mw-list").collect();

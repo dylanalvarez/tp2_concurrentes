@@ -1,10 +1,3 @@
-use crate::synonym::providers::base::Provider::Thesaurus;
-use crate::synonym::providers::base;
-
-pub fn synonyms(word: &str) -> Result<Vec<String>, String> {
-    return base::synonyms(word, Thesaurus);
-}
-
 pub fn raw_response_to_synonyms(raw_response: String) -> Result<Vec<String>, String> {
     let tmp_synonyms_vec = raw_response.split("<div class=\"single-synonym-wrapper\"").collect::<Vec<&str>>()[1];
     
