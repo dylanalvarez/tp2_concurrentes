@@ -62,8 +62,10 @@ parte A:
 
 
 -------------
-
 parte B:
+    main (if LIBRARY == actix)
+        main_addr = Main.start()
+        main_addr.send(Init)
 
     main (if LIBRARY == actix)
 
