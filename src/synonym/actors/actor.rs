@@ -72,6 +72,7 @@ impl Handler<FindSynonyms> for Provider {
                 } {
                     Ok(synonyms) => {
                         self.result_addr.do_send(Synonyms{word: word.clone(), synonyms});
+                        self.main_addr.do_send(ProviderFinished());
                     }
                     Err(error) => { panic!("{}", error); }
                 }
@@ -171,7 +172,7 @@ impl Handler<Init> for Main {
 
         // 1. leer archivo, por cada palabra:
         self.num_words += 1;
-        self.providers_addr[0].send(FindSynonyms("car".to_string()));
+        self.providers_addr[0].do_send(FindSynonyms("car".to_string()));
         // ...
     }
 }
@@ -183,7 +184,7 @@ impl Handler<ProviderFinished> for Main {
         self.num_processed_words += 1;
 
         if self.num_words * self.num_providers == self.num_processed_words * self.num_providers {
-            self.result_addr.send(Finish()); // Condicion de corte
+            self.result_addr.do_send(Finish()); // Condicion de corte
         }
     }
 }
