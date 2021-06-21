@@ -1,9 +1,9 @@
 use crate::synonym::providers::{thesaurus, merriam_webster, thesaurus2, http_requester};
 use crate::ResultBuilderMessage;
-use std::sync::mpsc::{Sender};
+use std::sync::mpsc::Sender;
 use crate::ResultBuilderMessage::NewSynonym;
 use std_semaphore::Semaphore;
-use std::sync::{Arc, Condvar, Mutex, PoisonError, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex};
 
 pub enum Provider {
     Thesaurus,
@@ -55,7 +55,10 @@ fn fetch_synonyms_raw_response(word: &str, base_url: &str, max_concurrent_reques
         Ok(mut allow_request) => { *allow_request = false; }
         Err(error) => { return Err(error.to_string()) }
     };
-    sleeper_sender.send(());
+    match sleeper_sender.send(()) {
+        Ok(_) => {}
+        Err(error) => { return Err(error.to_string()) }
+    };
     let result = http_requester::fetch_synonyms_raw_response(word.to_string(), base_url.to_string());
     max_concurrent_requests_semaphore.release();
     result

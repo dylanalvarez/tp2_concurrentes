@@ -1,6 +1,6 @@
 use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
 use std::thread;
-use std::sync::{mpsc, Arc, Mutex, Condvar, PoisonError, MutexGuard};
+use std::sync::{mpsc, Arc, Mutex, Condvar};
 use std::collections::HashMap;
 use crate::ResultBuilderMessage::NoMoreSynonyms;
 use std_semaphore::Semaphore;
@@ -65,12 +65,15 @@ fn main() {
         let condvar1 = time_between_requests_has_elapsed_condvar.clone();
         thread::spawn(move || {
             loop {
-                sleeper_receiver.recv();
+                match sleeper_receiver.recv() {
+                    Ok(_) => {}
+                    Err(_) => {}
+                };
                 sleep(Duration::from_secs(min_seconds_between_requests));
                 let (allow_request, condvar) = &*condvar1.clone();
                 match allow_request.lock() {
                     Ok(mut allow_request) => { *allow_request = true; }
-                    Err(error) => { panic!(error.to_string()) }
+                    Err(error) => { panic!("{}", error.to_string()) }
                 };
                 condvar.notify_all();
             }

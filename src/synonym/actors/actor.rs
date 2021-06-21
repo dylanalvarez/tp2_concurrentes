@@ -3,7 +3,7 @@ use crate::synonym::providers::{base, http_requester, thesaurus, thesaurus2, mer
 use actix::{Actor, Addr, Context, Handler, Message, System};
 use std::collections::HashMap;
 
-use self::actix::{AsyncContext, Recipient};
+use self::actix::{AsyncContext};
 
 #[derive(Message)]
 #[rtype(result = "()")]
