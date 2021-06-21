@@ -1,2 +1,4 @@
 car
 cat
+door
+house

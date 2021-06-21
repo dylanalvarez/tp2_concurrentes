@@ -1,15 +1,12 @@
 use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
+use crate::synonym::helpers::file_parser;
+use crate::ResultBuilderMessage::NoMoreSynonyms;
 use std::thread;
 use std::sync::{mpsc, Arc, Mutex, Condvar};
 use std::collections::HashMap;
-use crate::ResultBuilderMessage::NoMoreSynonyms;
-use crate::synonym::helpers::file_parser;
 use std_semaphore::Semaphore;
 use std::time::Duration;
 use std::thread::sleep;
-use std::fs::File;
-use std::io::{self, BufRead};
-use std::path::Path;
 
 mod synonym;
 
@@ -123,6 +120,9 @@ fn main() {
         Err(join_error) => { println!("{:?}", join_error) }
     };
 
-    // If actores
-    synonym::actors::actor::main();
+    // Obtener como param
+    let max_parallel_requests = 2;
+    let min_wait_millis: u64 = 1000;
+    let filename = "./words.txt";
+    synonym::actors::actor::start_actors(filename.to_string(), max_parallel_requests, min_wait_millis);
 }

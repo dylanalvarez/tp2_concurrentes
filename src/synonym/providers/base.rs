@@ -6,7 +6,7 @@ use crate::ResultBuilderMessage::NewSynonym;
 use std_semaphore::Semaphore;
 use std::sync::{Arc, Condvar, Mutex};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Provider {
     Thesaurus,
     Thesaurus2,
