@@ -16,11 +16,14 @@ fn main() {
     // let max_concurrent_requests = 4;
     // let min_time_between_requests = Duration::from_secs(1);
 
-    let (sender, receiver) = mpsc::channel::<ResultBuilderMessage>();
+    let (
+        result_builder_sender,
+        result_builder_receiver
+    ) = mpsc::channel::<ResultBuilderMessage>();
     let result_builder = thread::spawn(move || {
         let mut result = HashMap::<String, HashMap<String, usize>>::new();
         loop {
-            match receiver.recv() {
+            match result_builder_receiver.recv() {
                 Ok(message) => {
                     match message {
                         ResultBuilderMessage::NewSynonym { word, synonym } => {
@@ -46,9 +49,9 @@ fn main() {
         }
     });
 
-    let sender1 = mpsc::Sender::clone(&sender);
-    let sender2 = mpsc::Sender::clone(&sender);
-    let sender3 = mpsc::Sender::clone(&sender);
+    let sender1 = mpsc::Sender::clone(&result_builder_sender);
+    let sender2 = mpsc::Sender::clone(&result_builder_sender);
+    let sender3 = mpsc::Sender::clone(&result_builder_sender);
     let thesaurus2_thread = thread::spawn(move || {
         synonym::providers::base::synonyms(word, Thesaurus2, sender1);
     });
@@ -65,7 +68,7 @@ fn main() {
         Ok(_) => {}
         Err(error) => { println!("Error joining: {:?}", error) }
     };
-    match sender.send(NoMoreSynonyms) {
+    match result_builder_sender.send(NoMoreSynonyms) {
         Ok(_) => {}
         Err(_) => {panic!("Lost connection with result_builder")}
     }
