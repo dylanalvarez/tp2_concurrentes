@@ -1,5 +1,4 @@
-use reqwest::header::USER_AGENT;
-use crate::synonym::providers::{thesaurus, merriam_webster, thesaurus2};
+use crate::synonym::providers::{thesaurus, merriam_webster, thesaurus2, http_requester};
 use crate::ResultBuilderMessage;
 use std::sync::mpsc::{Sender};
 use crate::ResultBuilderMessage::NewSynonym;
@@ -18,7 +17,7 @@ pub fn synonyms(word: &str, provider: Provider, sender: Sender<ResultBuilderMess
         Provider::MerriamWebster => "https://www.merriam-webster.com/thesaurus/",
         Provider::Thesaurus2 => "https://www.thesaurus.com/browse/",
     };
-    match fetch_synonyms_raw_response(word, base_url, max_concurrent_requests_semaphore) {
+    match http_requester::fetch_synonyms_raw_response(word.to_string(), base_url.to_string()) {
         Err(error) => { panic!("{}", error); }
         Ok(response_body) => {
             match match provider {
@@ -38,29 +37,4 @@ pub fn synonyms(word: &str, provider: Provider, sender: Sender<ResultBuilderMess
             }
         }
     };
-}
-
-fn fetch_synonyms_raw_response(word: &str, base_url: &str, max_concurrent_requests_semaphore: &Arc<Semaphore>) -> Result<String, String> {
-    let mut query_url: String = base_url.to_owned();
-    query_url.push_str(word);
-
-    let client = reqwest::blocking::Client::new();
-
-    max_concurrent_requests_semaphore.acquire();
-    println!("Calling URL: {:?}", query_url);
-    let result = match client
-        .get(query_url.clone())
-        .header(USER_AGENT, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0")
-        .send() {
-        Ok(response) => {
-            match response.text() {
-                Ok(text) => {Ok(text)}
-                Err(error) => {Err(error.to_string())}
-            }
-        }
-        Err(error) => {Err(error.to_string())}
-    };
-    println!("Finished calling URL: {:?}", query_url);
-    max_concurrent_requests_semaphore.release();
-    result
 }
