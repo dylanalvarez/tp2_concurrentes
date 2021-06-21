@@ -1,9 +1,11 @@
 use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
 use std::thread;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex, Condvar, PoisonError, MutexGuard};
 use std::collections::HashMap;
 use crate::ResultBuilderMessage::NoMoreSynonyms;
 use std_semaphore::Semaphore;
+use std::time::Duration;
+use std::thread::sleep;
 
 mod synonym;
 
@@ -12,11 +14,15 @@ pub enum ResultBuilderMessage {
     NoMoreSynonyms
 }
 
+pub enum SleeperMessage {
+    RequestHasStarted
+}
+
 fn main() {
     let max_concurrent_requests = 2;
-    let max_concurrent_requests_semaphore = Arc::new(Semaphore::new(max_concurrent_requests));
+    let min_seconds_between_requests = 5;
 
-    // let min_time_between_requests = Duration::from_secs(1);
+    let max_concurrent_requests_semaphore = Arc::new(Semaphore::new(max_concurrent_requests));
 
     let (
         result_builder_sender,
@@ -53,22 +59,31 @@ fn main() {
 
     let mut synonym_fetcher_threads = Vec::new();
 
-    for word in ["car", "cat"].iter() {
-        let sender1 = mpsc::Sender::clone(&result_builder_sender);
-        let sender2 = mpsc::Sender::clone(&result_builder_sender);
-        let sender3 = mpsc::Sender::clone(&result_builder_sender);
-        let semaphore1 = max_concurrent_requests_semaphore.clone();
-        let semaphore2 = max_concurrent_requests_semaphore.clone();
-        let semaphore3 = max_concurrent_requests_semaphore.clone();
-        synonym_fetcher_threads.push(thread::spawn(move || {
-            synonym::providers::base::synonyms(word, Thesaurus2, sender1, &semaphore1);
-        }));
-        synonym_fetcher_threads.push(thread::spawn(move || {
-            synonym::providers::base::synonyms(word, MerriamWebster, sender2, &semaphore2);
-        }));
-        synonym_fetcher_threads.push(thread::spawn(move || {
-            synonym::providers::base::synonyms(word, Thesaurus, sender3, &semaphore3);
-        }));
+    for provider in [Thesaurus, Thesaurus2, MerriamWebster].iter() {
+        let time_between_requests_has_elapsed_condvar = Arc::new((Mutex::new(true), Condvar::new()));
+        let (sleeper_sender, sleeper_receiver) = mpsc::channel::<()>();
+        let condvar1 = time_between_requests_has_elapsed_condvar.clone();
+        thread::spawn(move || {
+            loop {
+                sleeper_receiver.recv();
+                sleep(Duration::from_secs(min_seconds_between_requests));
+                let (allow_request, condvar) = &*condvar1.clone();
+                match allow_request.lock() {
+                    Ok(mut allow_request) => { *allow_request = true; }
+                    Err(error) => { panic!(error.to_string()) }
+                };
+                condvar.notify_all();
+            }
+        });
+        for word in ["car", "cat"].iter() {
+            let result_builder_sender = mpsc::Sender::clone(&result_builder_sender);
+            let sleeper_sender = mpsc::Sender::clone(&sleeper_sender);
+            let semaphore = max_concurrent_requests_semaphore.clone();
+            let condvar2 = time_between_requests_has_elapsed_condvar.clone();
+            synonym_fetcher_threads.push(thread::spawn(move || {
+                synonym::providers::base::synonyms(word, provider, result_builder_sender, &semaphore, &*condvar2, sleeper_sender);
+            }));
+        }
     }
 
     for thread in synonym_fetcher_threads {
