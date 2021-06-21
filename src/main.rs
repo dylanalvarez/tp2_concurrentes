@@ -6,6 +6,9 @@ use crate::ResultBuilderMessage::NoMoreSynonyms;
 use std_semaphore::Semaphore;
 use std::time::Duration;
 use std::thread::sleep;
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
 
 mod synonym;
 
@@ -16,6 +19,14 @@ pub enum ResultBuilderMessage {
 
 pub enum SleeperMessage {
     RequestHasStarted
+}
+
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+    where P: AsRef<Path>, {
+    match File::open(filename) {
+        Ok(file) => { Ok(io::BufReader::new(file).lines()) }
+        Err(error) => { Err(error) }
+    }
 }
 
 fn main() {
@@ -78,15 +89,25 @@ fn main() {
                 condvar.notify_all();
             }
         });
-        for word in ["car", "cat"].iter() {
-            let result_builder_sender = mpsc::Sender::clone(&result_builder_sender);
-            let sleeper_sender = mpsc::Sender::clone(&sleeper_sender);
-            let semaphore = max_concurrent_requests_semaphore.clone();
-            let condvar2 = time_between_requests_has_elapsed_condvar.clone();
-            synonym_fetcher_threads.push(thread::spawn(move || {
-                synonym::providers::base::synonyms(word, provider, result_builder_sender, &semaphore, &*condvar2, sleeper_sender);
-            }));
-        }
+        match read_lines("./words.txt") {
+            Ok(lines) => {
+                for word in lines {
+                    match word {
+                        Ok(word) => {
+                            let result_builder_sender = mpsc::Sender::clone(&result_builder_sender);
+                            let sleeper_sender = mpsc::Sender::clone(&sleeper_sender);
+                            let semaphore = max_concurrent_requests_semaphore.clone();
+                            let condvar2 = time_between_requests_has_elapsed_condvar.clone();
+                            synonym_fetcher_threads.push(thread::spawn(move || {
+                                synonym::providers::base::synonyms(word.as_str(), provider, result_builder_sender, &semaphore, &*condvar2, sleeper_sender);
+                            }));
+                        }
+                        Err(error) => { panic!("{}", error) }
+                    };
+                }
+            }
+            Err(error) => {panic!("Couldn't read words.txt: {}", error)}
+        };
     }
 
     for thread in synonym_fetcher_threads {
