@@ -61,7 +61,8 @@ impl Handler<FindSynonyms> for Provider {
             base::Provider::Thesaurus2 => "https://www.thesaurus.com/browse/",
         }.to_string();
         
-        match http_requester::fetch_synonyms_raw_response(_msg.0, base_url) {
+        let word = _msg.0;
+        match http_requester::fetch_synonyms_raw_response(word.clone(), base_url) {
             Err(error) => { panic!("{}", error); },
             Ok(result) => {
                 match match self.provider_type {
@@ -70,7 +71,7 @@ impl Handler<FindSynonyms> for Provider {
                     base::Provider::Thesaurus2 => thesaurus2::raw_response_to_synonyms(result)
                 } {
                     Ok(synonyms) => {
-                        self.result_addr.send(Synonyms{word: _msg.0, synonyms});
+                        self.result_addr.do_send(Synonyms{word: word.clone(), synonyms});
                     }
                     Err(error) => { panic!("{}", error); }
                 }
