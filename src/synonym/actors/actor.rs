@@ -1,9 +1,9 @@
 extern crate actix;
 use crate::synonym::providers::{base, http_requester, thesaurus, thesaurus2, merriam_webster};
-use actix::{Actor, Addr, Context, Handler, Message, System};
+use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
+use actix::{Actor, ActorFutureExt, Addr, Context, Handler, Message, ResponseFuture, System, WrapFuture};
 use std::collections::HashMap;
-
-use self::actix::{AsyncContext};
+use self::actix::{AsyncContext, Recipient, SyncArbiter, SyncContext};
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -31,6 +31,12 @@ struct Init();
 #[derive(Message)]
 #[rtype(result = "()")]
 struct ProviderFinished();
+#[derive(Message)]
+#[rtype(result = "Result<String, String>")]
+struct SendRequest{
+    url: String,
+    word: String
+}
 
 struct Logger {}
 
@@ -40,6 +46,7 @@ impl Actor for Logger {
 
 struct Provider {
     result_addr: Addr<GlobalResult>,
+    requester_addr: Addr<HttpRequester>,
     logger_addr: Addr<Logger>,
     main_addr: Addr<Main>,
     provider_type: base::Provider,
@@ -48,6 +55,26 @@ struct Provider {
 impl Actor for Provider {
     type Context = Context<Self>;
 }
+
+struct HttpRequester {
+    logger_addr: Addr<Logger>,
+}
+
+impl Actor for HttpRequester {
+    type Context = SyncContext<Self>;
+}
+
+impl Handler<SendRequest> for HttpRequester {
+    type Result = ResponseFuture<Result<String, String>>;
+
+    fn handle(&mut self, msg: SendRequest, ctx: &mut Self::Context) -> Self::Result {
+        Box::pin(async move {
+            http_requester::fetch_synonyms_raw_response(msg.word, msg.url)
+        })
+    }
+}
+
+
 
 impl Handler<FindSynonyms> for Provider {
     type Result = ();
@@ -62,22 +89,31 @@ impl Handler<FindSynonyms> for Provider {
         }.to_string();
         
         let word = _msg.0;
-        match http_requester::fetch_synonyms_raw_response(word.clone(), base_url) {
-            Err(error) => { panic!("{}", error); },
-            Ok(result) => {
-                match match self.provider_type {
-                    base::Provider::Thesaurus => thesaurus::raw_response_to_synonyms(result),
-                    base::Provider::MerriamWebster => merriam_webster::raw_response_to_synonyms(result),
-                    base::Provider::Thesaurus2 => thesaurus2::raw_response_to_synonyms(result)
-                } {
-                    Ok(synonyms) => {
-                        self.result_addr.do_send(Synonyms{word: word.clone(), synonyms});
-                        self.main_addr.do_send(ProviderFinished());
-                    }
-                    Err(error) => { panic!("{}", error); }
+        Box::pin(async {
+            let response = self.requester_addr
+                .send(SendRequest { word: word.clone(), url: base_url.clone()}).await;
+            match response {
+                Err(error) => { panic!("{}", error); },
+                Ok(result) => {
+                    match result {
+                        Err(error) => { panic!("{}", error); },
+                        Ok(result) => {
+                            match match self.provider_type {
+                                base::Provider::Thesaurus => thesaurus::raw_response_to_synonyms(result),
+                                base::Provider::MerriamWebster => merriam_webster::raw_response_to_synonyms(result),
+                                base::Provider::Thesaurus2 => thesaurus2::raw_response_to_synonyms(result)
+                            } {
+                                Ok(synonyms) => {
+                                    self.result_addr.do_send(Synonyms{word: word.clone(), synonyms});
+                                    self.main_addr.do_send(ProviderFinished());
+                                }
+                                Err(error) => { panic!("{}", error); }
+                            }
+                        }
+                    };
                 }
             }
-        };
+        }).into_actor(self);
     }
 }
 
@@ -121,6 +157,8 @@ impl Handler<Finish> for GlobalResult {
 
     fn handle(&mut self, _msg: Finish, _ctx: &mut Context<Self>) -> Self::Result {
         // 1. imprimir resultado global desde this.synonyms
+        print!("{:?}", self.synonyms);
+        System::current().stop();
     }
 }
 
@@ -129,6 +167,7 @@ struct Main {
     num_processed_words: usize,
     num_providers: usize,
     result_addr: Addr<GlobalResult>,
+    requester_addr: Addr<HttpRequester>,
     logger_addr: Addr<Logger>,
     providers_addr: Vec<Addr<Provider>>,
 }
@@ -141,32 +180,15 @@ impl Handler<Init> for Main {
     type Result = ();
 
     fn handle(&mut self, _msg: Init, _ctx: &mut Context<Self>) -> Self::Result {
-        self.result_addr = GlobalResult {
-            synonyms: HashMap::new(),
+        for provider in [MerriamWebster, Thesaurus, Thesaurus2].iter() {
+            self.providers_addr.push(Provider {
+                result_addr: self.result_addr.clone(),
+                logger_addr: self.logger_addr.clone(),
+                requester_addr: self.requester_addr.clone(),
+                main_addr: _ctx.address(),
+                provider_type: *provider
+            }.start());
         }
-        .start();
-        self.logger_addr = Logger {}.start();
-        self.providers_addr[0] = Provider {
-            result_addr: self.result_addr.clone(),
-            logger_addr: self.logger_addr.clone(),
-            main_addr: _ctx.address(),
-            provider_type: base::Provider::MerriamWebster
-        }
-        .start();
-        self.providers_addr[1] = Provider {
-            result_addr: self.result_addr.clone(),
-            logger_addr: self.logger_addr.clone(),
-            main_addr: _ctx.address(),
-            provider_type: base::Provider::Thesaurus
-        }
-        .start();
-        self.providers_addr[2] = Provider {
-            result_addr: self.result_addr.clone(),
-            logger_addr: self.logger_addr.clone(),
-            main_addr: _ctx.address(),
-            provider_type: base::Provider::Thesaurus2
-        }
-        .start();
         // Instanciar los demas providers...
         self.num_providers = self.providers_addr.len();
 
@@ -191,7 +213,34 @@ impl Handler<ProviderFinished> for Main {
 
 pub async fn main() {
     let system = System::new();
-    system.block_on(async {});
+    system.block_on(async {
+        
+        let result_addr = GlobalResult {
+            synonyms: HashMap::new(),
+        }
+        .start();
+        
+        
+        let logger_addr = Logger {}.start();
+        // let requester_addr = HttpRequester {
+        //     logger_addr: logger_addr.clone()};
+        let logger_addr_cloned = logger_addr.clone();
+            
+        let requester_addr = SyncArbiter::start(10,move || HttpRequester {
+                logger_addr: logger_addr_cloned.clone()});
+        
+        let main_addr = Main {
+            num_words: 1,
+            num_processed_words: 0,
+            num_providers: 3,
+            result_addr: result_addr,
+            requester_addr: requester_addr,
+            logger_addr: logger_addr,
+            providers_addr: vec![],
+        }.start();
+
+        main_addr.do_send(Init());
+    });
     // TODO
     system.run().unwrap();
 }

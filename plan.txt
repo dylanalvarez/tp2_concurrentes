@@ -91,15 +91,10 @@ message SendRequest {
 // Se deberia iniciar con SyncArbiter::start(MAX_REQUESTS, || HttpRequester);
 // Con eso ya limitaria la cantidad de mensajes procesados por este actor en paralelo
 actor HttpRequester {
-    attribute: result_addr<GlobalResult>
     attribute: logger_addr<Logger>
-    attribute: main_addr<Main>
 
     handler<msg: SendRequest> {
         resp_http = call_http(msg.url, msg.word)
-        resp = parse(resp_http)
-        result_addr.send(Synonyms(resp))
-        main_addr.send(ProviderFinished)
     }
 }
 
