@@ -84,4 +84,7 @@ fn main() {
         }
         Err(join_error) => { println!("{:?}", join_error) }
     };
+
+    // If actores
+    synonym::actors::actor::main();
 }
