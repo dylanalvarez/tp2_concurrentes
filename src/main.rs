@@ -82,7 +82,7 @@ fn main() {
                 condvar.notify_all();
             }
         });
-        match read_lines("./words.txt") {
+        match file_parser::read_lines("./words.txt") {
             Ok(lines) => {
                 for word in lines {
                     match word {
