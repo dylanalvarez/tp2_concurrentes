@@ -1,7 +1,7 @@
 extern crate actix;
 use actix::{Addr, Actor, Context, Handler, System, Message};
 use std::collections::HashMap;
-use self::actix::{Recipient, AsyncContext};
+use self::actix::{AsyncContext};
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -53,7 +53,7 @@ impl Handler<ExecuteRequest> for Provider {
     type Result = ();
 
     fn handle(&mut self, _msg: ExecuteRequest, _ctx: &mut Context<Self>) -> Self::Result {
-        return Ok();
+        return ();
     }
 }
 

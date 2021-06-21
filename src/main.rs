@@ -1,8 +1,9 @@
 use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
 use std::thread;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::collections::HashMap;
 use crate::ResultBuilderMessage::NoMoreSynonyms;
+use std_semaphore::Semaphore;
 
 mod synonym;
 
@@ -12,7 +13,9 @@ pub enum ResultBuilderMessage {
 }
 
 fn main() {
-    // let max_concurrent_requests = 4;
+    let max_concurrent_requests = 2;
+    let max_concurrent_requests_semaphore = Arc::new(Semaphore::new(max_concurrent_requests));
+
     // let min_time_between_requests = Duration::from_secs(1);
 
     let (
@@ -54,14 +57,17 @@ fn main() {
         let sender1 = mpsc::Sender::clone(&result_builder_sender);
         let sender2 = mpsc::Sender::clone(&result_builder_sender);
         let sender3 = mpsc::Sender::clone(&result_builder_sender);
+        let semaphore1 = max_concurrent_requests_semaphore.clone();
+        let semaphore2 = max_concurrent_requests_semaphore.clone();
+        let semaphore3 = max_concurrent_requests_semaphore.clone();
         synonym_fetcher_threads.push(thread::spawn(move || {
-            synonym::providers::base::synonyms(word, Thesaurus2, sender1);
+            synonym::providers::base::synonyms(word, Thesaurus2, sender1, &semaphore1);
         }));
         synonym_fetcher_threads.push(thread::spawn(move || {
-            synonym::providers::base::synonyms(word, MerriamWebster, sender2);
+            synonym::providers::base::synonyms(word, MerriamWebster, sender2, &semaphore2);
         }));
         synonym_fetcher_threads.push(thread::spawn(move || {
-            synonym::providers::base::synonyms(word, Thesaurus, sender3);
+            synonym::providers::base::synonyms(word, Thesaurus, sender3, &semaphore3);
         }));
     }
 
