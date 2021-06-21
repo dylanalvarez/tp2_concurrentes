@@ -12,7 +12,6 @@ pub enum ResultBuilderMessage {
 }
 
 fn main() {
-    let word = "car";
     // let max_concurrent_requests = 4;
     // let min_time_between_requests = Duration::from_secs(1);
 
@@ -49,25 +48,29 @@ fn main() {
         }
     });
 
-    let sender1 = mpsc::Sender::clone(&result_builder_sender);
-    let sender2 = mpsc::Sender::clone(&result_builder_sender);
-    let sender3 = mpsc::Sender::clone(&result_builder_sender);
-    let thesaurus2_thread = thread::spawn(move || {
-        synonym::providers::base::synonyms(word, Thesaurus2, sender1);
-    });
-    let webster_thread = thread::spawn(move || {
-        synonym::providers::base::synonyms(word, MerriamWebster, sender2);
-    });
-    let thesaurus_thread = thread::spawn(move || {
-        synonym::providers::base::synonyms(word, Thesaurus, sender3);
-    });
+    let mut synonym_fetcher_threads = Vec::new();
 
-    match thesaurus2_thread.join()
-        .and_then(|_| webster_thread.join())
-        .and_then(|_| thesaurus_thread.join()) {
-        Ok(_) => {}
-        Err(error) => { println!("Error joining: {:?}", error) }
-    };
+    for word in ["car", "cat"].iter() {
+        let sender1 = mpsc::Sender::clone(&result_builder_sender);
+        let sender2 = mpsc::Sender::clone(&result_builder_sender);
+        let sender3 = mpsc::Sender::clone(&result_builder_sender);
+        synonym_fetcher_threads.push(thread::spawn(move || {
+            synonym::providers::base::synonyms(word, Thesaurus2, sender1);
+        }));
+        synonym_fetcher_threads.push(thread::spawn(move || {
+            synonym::providers::base::synonyms(word, MerriamWebster, sender2);
+        }));
+        synonym_fetcher_threads.push(thread::spawn(move || {
+            synonym::providers::base::synonyms(word, Thesaurus, sender3);
+        }));
+    }
+
+    for thread in synonym_fetcher_threads {
+        match thread.join() {
+            Ok(_) => {}
+            Err(_) => {panic!("Couldn't join a synonym fetcher")}
+        }
+    }
     match result_builder_sender.send(NoMoreSynonyms) {
         Ok(_) => {}
         Err(_) => {panic!("Lost connection with result_builder")}
