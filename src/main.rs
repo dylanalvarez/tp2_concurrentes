@@ -3,6 +3,7 @@ use std::thread;
 use std::sync::{mpsc, Arc, Mutex, Condvar};
 use std::collections::HashMap;
 use crate::ResultBuilderMessage::NoMoreSynonyms;
+use crate::synonym::helpers::file_parser;
 use std_semaphore::Semaphore;
 use std::time::Duration;
 use std::thread::sleep;
@@ -19,14 +20,6 @@ pub enum ResultBuilderMessage {
 
 pub enum SleeperMessage {
     RequestHasStarted
-}
-
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-    where P: AsRef<Path>, {
-    match File::open(filename) {
-        Ok(file) => { Ok(io::BufReader::new(file).lines()) }
-        Err(error) => { Err(error) }
-    }
 }
 
 fn main() {

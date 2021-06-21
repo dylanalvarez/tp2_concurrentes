@@ -1,4 +1,5 @@
-use crate::synonym::providers::{thesaurus, merriam_webster, thesaurus2, http_requester};
+use crate::synonym::providers::{thesaurus, merriam_webster, thesaurus2};
+use crate::synonym::helpers::http_requester;
 use crate::ResultBuilderMessage;
 use std::sync::mpsc::Sender;
 use crate::ResultBuilderMessage::NewSynonym;
