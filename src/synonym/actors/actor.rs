@@ -15,10 +15,6 @@ struct FindSynonyms(String);
 
 #[derive(Message)]
 #[rtype(result = "()")]
-struct ExecuteRequest();
-
-#[derive(Message)]
-#[rtype(result = "()")]
 struct Synonyms {
     word: String,
     synonyms: Vec<String>,
@@ -152,14 +148,6 @@ impl Handler<FindSynonyms> for Provider {
         let word = _msg.0;
         self.coordinator_addr.do_send(SendRequest { word: word.clone(), url: base_url.clone(), provider_addr: _ctx.address() });
         ()
-    }
-}
-
-impl Handler<ExecuteRequest> for Provider {
-    type Result = ();
-
-    fn handle(&mut self, _msg: ExecuteRequest, _ctx: &mut Context<Self>) -> Self::Result {
-        return ();
     }
 }
 
