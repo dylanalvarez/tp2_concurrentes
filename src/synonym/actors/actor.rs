@@ -263,7 +263,7 @@ impl Handler<ProviderFinished> for Main {
 }
 
 
-pub fn start_actors(filename: String, max_requests: usize, min_wait_millis: u64) {
+pub fn start_actors(filename: &String, max_requests: usize, min_wait_millis: u64) {
     println!("Main actores");
     let system = System::new();
     system.block_on(async {
@@ -289,7 +289,7 @@ pub fn start_actors(filename: String, max_requests: usize, min_wait_millis: u64)
             providers_addr: vec![],
         }.start();
 
-        main_addr.do_send(Init { filename, min_wait: min_wait_millis });
+        main_addr.do_send(Init { filename: filename.to_string(), min_wait: min_wait_millis });
     });
 
     system.run().unwrap();
