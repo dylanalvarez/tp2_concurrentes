@@ -1,3 +1,4 @@
+use crate::synonym::logger::file_logger;
 use std::env;
 mod synonym;
 
@@ -11,6 +12,7 @@ pub enum SleeperMessage {
 }
 
 fn main() {
+    file_logger::log("Starting...");
     let args: Vec<String> = env::args().collect();
 
     if let (
@@ -33,11 +35,11 @@ fn main() {
         ) {
             match option.as_str() {
                 "actors" => {
-                    synonym::actors::actor::start_actors(
+    synonym::actors::actor::start_actors(
                         filename,
                         max_concurrent_requests,
                         min_seconds_between_requests * 1000
-                    );
+    );
                 },
                 "without_actors" => {
                     synonym::without_actors::without_actors::without_actors(

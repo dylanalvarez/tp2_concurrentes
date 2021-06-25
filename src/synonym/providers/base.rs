@@ -5,12 +5,20 @@ use std::sync::mpsc::Sender;
 use crate::ResultBuilderMessage::NewSynonym;
 use std_semaphore::Semaphore;
 use std::sync::{Arc, Condvar, Mutex};
+use std::fmt;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Provider {
     Thesaurus,
     Thesaurus2,
     MerriamWebster
+}
+
+// For converting enum to string
+impl fmt::Display for Provider {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 pub fn synonyms(word: &str, provider: &Provider, result_builder_sender: Sender<ResultBuilderMessage>, max_concurrent_requests_semaphore: &Arc<Semaphore>, time_between_requests_has_elapsed_condvar: &(Mutex<bool>, Condvar), sleeper_sender: Sender<()>) {

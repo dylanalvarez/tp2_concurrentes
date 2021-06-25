@@ -3,10 +3,10 @@ use crate::synonym::helpers::file_parser;
 use crate::synonym::helpers::http_requester;
 use crate::synonym::providers::{base, merriam_webster, thesaurus, thesaurus2};
 use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
+use crate::synonym::logger::file_logger;
 use self::actix::{AsyncContext, SyncArbiter, SyncContext};
 use actix::{Actor, Addr, Context, Handler, Message, System, WrapFuture};
 use std::collections::HashMap;
-
 use std::time::{Duration};
 
 #[derive(Message)]
@@ -50,19 +50,35 @@ struct RequestResult {
     word: String,
 }
 
+#[derive(Message)]
+#[rtype(result = "()")]
+struct Log {
+    content: String
+}
+
 struct Logger {}
+
+impl Actor for Logger {
+    type Context = SyncContext<Self>;
+}
+
+impl Handler<Log> for Logger {
+    type Result = ();
+
+    fn handle(&mut self, msg: Log, _ctx: &mut Self::Context) -> Self::Result {
+        let content: &str = &*("[actors] ".to_owned() + &*msg.content);
+        file_logger::log(content);
+    }
+}
 
 struct ProviderCoordinator {
     id: usize,
     requester_addr: Addr<HttpRequester>,
     min_wait_millis_between_requests: u64,
+    logger_addr: Addr<Logger>
 }
 
 impl Actor for ProviderCoordinator {
-    type Context = Context<Self>;
-}
-
-impl Actor for Logger {
     type Context = Context<Self>;
 }
 
@@ -90,7 +106,7 @@ impl Handler<SendRequest> for ProviderCoordinator {
     type Result = ();
 
     fn handle(&mut self, msg: SendRequest, ctx: &mut Self::Context) -> Self::Result {
-        println!("Handle SendRequest on ProviderCoordinator ID = {} - URL = {}", self.id, msg.url);
+        self.logger_addr.do_send(Log { content: format!("Handle SendRequest on ProviderCoordinator ID = {} - URL = {}", self.id, msg.url) });
         let min_wait_millis = Duration::from_millis(self.min_wait_millis_between_requests);
         ctx.wait(actix::clock::sleep(min_wait_millis).into_actor(self));
 
@@ -103,7 +119,7 @@ impl Handler<SendRequest> for HttpRequester {
     type Result = ();
 
     fn handle(&mut self, msg: SendRequest, _ctx: &mut Self::Context) -> Self::Result {
-        println!("Handle SendRequest on HttpRequester");
+        self.logger_addr.do_send(Log { content: format!("Handle SendRequest for word {} on HttpRequester", msg.word) });
         let cloned_word = msg.word.clone();
         let raw_response = http_requester::fetch_synonyms_raw_response(msg.word, msg.url);
         match raw_response {
@@ -137,7 +153,7 @@ impl Handler<FindSynonyms> for Provider {
     type Result = ();
 
     fn handle(&mut self, _msg: FindSynonyms, _ctx: &mut Context<Self>) -> Self::Result {
-        println!("Handle FindSynonyms on Provider {:?}", self.provider_type);
+        self.logger_addr.do_send(Log { content: format!("Handle FindSynonyms on Provider {}", self.provider_type) });
 
         let base_url = match self.provider_type {
             base::Provider::Thesaurus => "https://thesaurus.yourdictionary.com/",
@@ -152,7 +168,8 @@ impl Handler<FindSynonyms> for Provider {
 }
 
 struct GlobalResult {
-    synonyms: HashMap<String, HashMap<String, usize>>, // Nested HashMap
+    synonyms: HashMap<String, HashMap<String, usize>>,
+    logger_addr: Addr<Logger>
 }
 
 impl Actor for GlobalResult {
@@ -180,7 +197,9 @@ impl Handler<Finish> for GlobalResult {
     type Result = ();
 
     fn handle(&mut self, _msg: Finish, _ctx: &mut Context<Self>) -> Self::Result {
-        print!("{:?}", self.synonyms);
+        self.logger_addr.do_send(Log { content: format!("Final result: {:?}", self.synonyms) });
+        // Wait for last sent message to finish before stoping actix arbitrer
+        self.logger_addr.send(Log { content: format!("GlobalResult actor received Finish message. Terminating...") });
         System::current().stop();
     }
 }
@@ -203,10 +222,14 @@ impl Handler<Init> for Main {
     type Result = ();
 
     fn handle(&mut self, _msg: Init, _ctx: &mut Context<Self>) -> Self::Result {
-        let mut i = 0;
+        let mut coordinator_id = 0;
         for provider in [MerriamWebster, Thesaurus, Thesaurus2].iter() {
-            let coordinator_addr = ProviderCoordinator { id: i, requester_addr: self.requester_addr.clone(), min_wait_millis_between_requests: _msg.min_wait }.start();
-            i += 1;
+            let coordinator_addr = ProviderCoordinator {
+                id: coordinator_id,
+                requester_addr: self.requester_addr.clone(),
+                min_wait_millis_between_requests: _msg.min_wait,
+                logger_addr: self.logger_addr.clone()
+            }.start();
             self.providers_addr.push(Provider {
                 result_addr: self.result_addr.clone(),
                 logger_addr: self.logger_addr.clone(),
@@ -214,6 +237,8 @@ impl Handler<Init> for Main {
                 coordinator_addr: coordinator_addr.clone(),
                 provider_type: *provider,
             }.start());
+
+            coordinator_id += 1;
         }
         self.num_providers = self.providers_addr.len();
 
@@ -252,20 +277,23 @@ impl Handler<ProviderFinished> for Main {
 
 
 pub fn start_actors(filename: &String, max_requests: usize, min_wait_millis: u64) {
-    println!("Main actores");
-    let system = System::new();
+    file_logger::log("Actors solution starting");
+    let system = System::new(); // Creates an Arbitrer where the actors will be running on
     system.block_on(async {
-        let result_addr = GlobalResult {
-            synonyms: HashMap::new(),
-        }
-            .start();
 
-        let logger_addr = Logger {}.start();
+        // With SyncArbitrer, these actors will have it's different arbitrer and consequently
+        // run in separate threads
+        let logger_addr = SyncArbiter::start(1, move || Logger {});
         let logger_addr_cloned = logger_addr.clone();
 
         let requester_addr = SyncArbiter::start(max_requests, move || HttpRequester {
             logger_addr: logger_addr_cloned.clone()
         });
+
+        let result_addr = GlobalResult {
+            synonyms: HashMap::new(),
+            logger_addr: logger_addr.clone()
+        }.start();
 
         let main_addr = Main {
             num_words: 0,
