@@ -1,5 +1,7 @@
 use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
 use crate::synonym::helpers::file_parser;
+use crate::synonym::logger::file_logger;
+use std::sync::mpsc::Sender;
 use std::thread;
 use std::sync::{mpsc, Arc, Mutex, Condvar};
 use std::collections::HashMap;
@@ -16,6 +18,24 @@ pub fn without_actors(filename: &String, max_concurrent_requests: usize, min_sec
         result_builder_sender,
         result_builder_receiver
     ) = mpsc::channel::<ResultBuilderMessage>();
+
+    let (log_sender, log_receiver) = mpsc::channel::<String>();
+    let log_sender_result_builder = mpsc::Sender::clone(&log_sender);
+
+    thread::spawn(move || {
+        loop {
+            match log_receiver.recv() {
+                Err(e) => {
+                    panic!(e)
+                }
+
+                Ok(string_to_log) => {
+                    file_logger::log(&string_to_log);
+                }
+            }
+        }
+    });
+
     let result_builder = thread::spawn(move || {
         let mut result = HashMap::<String, HashMap<String, usize>>::new();
         loop {
@@ -34,11 +54,19 @@ pub fn without_actors(filename: &String, max_concurrent_requests: usize, min_sec
                             *synonym_word_count += 1;
                         }
                         ResultBuilderMessage::NoMoreSynonyms => {
+                            handle_log(
+                                &log_sender_result_builder,
+                                "[Result Builder] Recieved NoMoreSynonyms message. Returning result...".to_string()
+                            );
                             return Ok(result);
                         }
                     }
                 }
                 Err(error) => {
+                    handle_log(
+                        &log_sender_result_builder,
+                        format!("[Result Builder] Error receiving from channel: {:?}", error)
+                    );
                     return Err(error);
                 }
             }
@@ -105,5 +133,14 @@ pub fn without_actors(filename: &String, max_concurrent_requests: usize, min_sec
             }
         }
         Err(join_error) => { println!("{:?}", join_error) }
+    };
+}
+
+fn handle_log(log_sender: &Sender<String>, message: String) {
+    match log_sender.send(message) {
+        Ok(_) => {}
+        Err(err) => {
+            println!("Failed to log: {:?}", err)
+        }
     };
 }
