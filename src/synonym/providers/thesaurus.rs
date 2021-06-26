@@ -56,8 +56,8 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_synonyms_result() {
-        let path = Path::new("src/synonym/providers/tests/empty_search.html");
+    fn test_empty_synonyms_result_thesaurus() {
+        let path = Path::new("src/synonym/providers/tests/empty_search_thesaurus.html");
         match read_to_string(path) {
             Err(e) => {
                 print!("{:?}", e);

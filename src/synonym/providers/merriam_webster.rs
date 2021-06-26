@@ -16,3 +16,25 @@ pub fn raw_response_to_synonyms(body_to_scrap: String) -> Result<Vec<String>, St
 
     Ok(synonyms)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::{read_to_string}, path::Path};
+
+    use super::*;
+    #[test]
+    fn test_empty_synonyms_result_thesaurus2() {
+        let path = Path::new("src/synonym/providers/tests/empty_search_merriam_webster.html");
+        match read_to_string(path) {
+            Err(e) => {
+                print!("{:?}", e);
+                panic!("Cant open file");
+            }
+
+            Ok(raw_html) => {
+                let result = raw_response_to_synonyms(raw_html);
+                assert_eq!(result, Ok(vec![]))
+            }
+        };
+    }
+}
