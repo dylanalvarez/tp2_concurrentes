@@ -13,5 +13,6 @@ pub fn log(content: &str) {
         .expect("Unable to open log file");
     let line = content.to_string() + LINE_BREAK;
     println!("{:?}", content);
-    file.write_all(line.as_bytes()).expect("Unable to write data");
+    file.write_all(line.as_bytes())
+        .expect("Unable to write data");
 }

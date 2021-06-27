@@ -1,13 +1,14 @@
 extern crate actix;
+use self::actix::{AsyncContext, SyncArbiter, SyncContext};
 use crate::synonym::helpers::file_parser;
 use crate::synonym::helpers::http_requester;
-use crate::synonym::providers::{base, merriam_webster, thesaurus, thesaurus2};
-use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
 use crate::synonym::logger::file_logger;
-use self::actix::{AsyncContext, SyncArbiter, SyncContext};
+use crate::synonym::providers::base::Provider::{MerriamWebster, Thesaurus, Thesaurus2};
+use crate::synonym::providers::{base, merriam_webster, thesaurus, thesaurus2};
+use actix::ResponseFuture;
 use actix::{Actor, Addr, Context, Handler, Message, System, WrapFuture};
 use std::collections::HashMap;
-use std::time::{Duration};
+use std::time::Duration;
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -21,8 +22,8 @@ struct Synonyms {
 }
 
 #[derive(Message)]
-#[rtype(result = "()")]
-struct Finish();
+#[rtype(result = "Result<(), ()>")]
+struct Finish;
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -53,7 +54,7 @@ struct RequestResult {
 #[derive(Message)]
 #[rtype(result = "()")]
 struct Log {
-    content: String
+    content: String,
 }
 
 struct Logger {}
@@ -75,7 +76,7 @@ struct ProviderCoordinator {
     id: usize,
     requester_addr: Addr<HttpRequester>,
     min_wait_millis_between_requests: u64,
-    logger_addr: Addr<Logger>
+    logger_addr: Addr<Logger>,
 }
 
 impl Actor for ProviderCoordinator {
@@ -106,7 +107,12 @@ impl Handler<SendRequest> for ProviderCoordinator {
     type Result = ();
 
     fn handle(&mut self, msg: SendRequest, ctx: &mut Self::Context) -> Self::Result {
-        self.logger_addr.do_send(Log { content: format!("Handle SendRequest on ProviderCoordinator ID = {} - URL = {}", self.id, msg.url) });
+        self.logger_addr.do_send(Log {
+            content: format!(
+                "Handle SendRequest on ProviderCoordinator ID = {} - URL = {}",
+                self.id, msg.url
+            ),
+        });
         let min_wait_millis = Duration::from_millis(self.min_wait_millis_between_requests);
         ctx.wait(actix::clock::sleep(min_wait_millis).into_actor(self));
 
@@ -114,18 +120,30 @@ impl Handler<SendRequest> for ProviderCoordinator {
     }
 }
 
-
 impl Handler<SendRequest> for HttpRequester {
     type Result = ();
 
     fn handle(&mut self, msg: SendRequest, _ctx: &mut Self::Context) -> Self::Result {
-        self.logger_addr.do_send(Log { content: format!("Handle SendRequest for word {} on HttpRequester", msg.word) });
+        self.logger_addr.do_send(Log {
+            content: format!("Handle SendRequest for word {} on HttpRequester", msg.word),
+        });
         let cloned_word = msg.word.clone();
         let raw_response = http_requester::fetch_synonyms_raw_response(msg.word, msg.url);
         match raw_response {
-            Err(error) => { panic!("{}", error); }
+            Err(error) => {
+                panic!("{}", error);
+            }
             Ok(result) => {
-                msg.provider_addr.do_send(RequestResult { response: result, word: cloned_word });
+                self.logger_addr.do_send(Log {
+                    content: format!(
+                        "Sending RequestResult for synonyms of {}",
+                        cloned_word.clone()
+                    ),
+                });
+                msg.provider_addr.do_send(RequestResult {
+                    response: result,
+                    word: cloned_word,
+                });
             }
         }
     }
@@ -138,13 +156,18 @@ impl Handler<RequestResult> for Provider {
         match match self.provider_type {
             base::Provider::Thesaurus => thesaurus::raw_response_to_synonyms(result),
             base::Provider::MerriamWebster => merriam_webster::raw_response_to_synonyms(result),
-            base::Provider::Thesaurus2 => thesaurus2::raw_response_to_synonyms(result)
+            base::Provider::Thesaurus2 => thesaurus2::raw_response_to_synonyms(result),
         } {
             Ok(synonyms) => {
-                self.result_addr.do_send(Synonyms { word: _msg.word.clone(), synonyms });
+                self.result_addr.do_send(Synonyms {
+                    word: _msg.word.clone(),
+                    synonyms,
+                });
                 self.main_addr.do_send(ProviderFinished());
             }
-            Err(error) => { panic!("{}", error); }
+            Err(error) => {
+                panic!("{}", error);
+            }
         }
     }
 }
@@ -153,23 +176,29 @@ impl Handler<FindSynonyms> for Provider {
     type Result = ();
 
     fn handle(&mut self, _msg: FindSynonyms, _ctx: &mut Context<Self>) -> Self::Result {
-        self.logger_addr.do_send(Log { content: format!("Handle FindSynonyms on Provider {}", self.provider_type) });
+        let word = _msg.0;
+        self.logger_addr.do_send(Log {
+            content: format!("Handle FindSynonyms on Provider {} for word {}", self.provider_type, word),
+        });
 
         let base_url = match self.provider_type {
             base::Provider::Thesaurus => "https://thesaurus.yourdictionary.com/",
             base::Provider::MerriamWebster => "https://www.merriam-webster.com/thesaurus/",
             base::Provider::Thesaurus2 => "https://www.thesaurus.com/browse/",
-        }.to_string();
+        }
+        .to_string();
 
-        let word = _msg.0;
-        self.coordinator_addr.do_send(SendRequest { word: word.clone(), url: base_url.clone(), provider_addr: _ctx.address() });
-        ()
+        self.coordinator_addr.do_send(SendRequest {
+            word: word.clone(),
+            url: base_url.clone(),
+            provider_addr: _ctx.address(),
+        });
     }
 }
 
 struct GlobalResult {
     synonyms: HashMap<String, HashMap<String, usize>>,
-    logger_addr: Addr<Logger>
+    logger_addr: Addr<Logger>,
 }
 
 impl Actor for GlobalResult {
@@ -180,27 +209,40 @@ impl Handler<Synonyms> for GlobalResult {
     type Result = ();
 
     fn handle(&mut self, _msg: Synonyms, _ctx: &mut Context<Self>) -> Self::Result {
-        let word_partial_result =
-            self.synonyms.entry(_msg.word)
-                .or_insert(HashMap::new());
+        let word_partial_result = self.synonyms.entry(_msg.word).or_insert(HashMap::new());
 
         for synonym in _msg.synonyms {
-            let synonym_word_count = word_partial_result
-                .entry(synonym)
-                .or_insert(0);
+            let synonym_word_count = word_partial_result.entry(synonym).or_insert(0);
             *synonym_word_count += 1;
         }
     }
 }
 
 impl Handler<Finish> for GlobalResult {
-    type Result = ();
+    type Result = ResponseFuture<Result<(), ()>>;
 
     fn handle(&mut self, _msg: Finish, _ctx: &mut Context<Self>) -> Self::Result {
-        self.logger_addr.do_send(Log { content: format!("Final result: {:?}", self.synonyms) });
+        self.logger_addr.do_send(Log {
+            content: format!("Final result: {:?}", self.synonyms),
+        });
         // Wait for last sent message to finish before stoping actix arbitrer
-        self.logger_addr.send(Log { content: format!("GlobalResult actor received Finish message. Terminating...") });
-        System::current().stop();
+        let fut = self.logger_addr.send(Log {
+            content: format!("GlobalResult actor received Finish message. Terminating..."),
+        });
+
+        Box::pin(async move {
+            match fut.await {
+                Ok(_) => {
+                    System::current().stop();
+                    Ok(())
+                }
+                Err(e) => {
+                    println!("{:?}", e);
+                    System::current().stop();
+                    Err(())
+                }
+            }
+        })
     }
 }
 
@@ -228,15 +270,19 @@ impl Handler<Init> for Main {
                 id: coordinator_id,
                 requester_addr: self.requester_addr.clone(),
                 min_wait_millis_between_requests: _msg.min_wait,
-                logger_addr: self.logger_addr.clone()
-            }.start();
-            self.providers_addr.push(Provider {
-                result_addr: self.result_addr.clone(),
                 logger_addr: self.logger_addr.clone(),
-                main_addr: _ctx.address(),
-                coordinator_addr: coordinator_addr.clone(),
-                provider_type: *provider,
-            }.start());
+            }
+            .start();
+            self.providers_addr.push(
+                Provider {
+                    result_addr: self.result_addr.clone(),
+                    logger_addr: self.logger_addr.clone(),
+                    main_addr: _ctx.address(),
+                    coordinator_addr: coordinator_addr.clone(),
+                    provider_type: *provider,
+                }
+                .start(),
+            );
 
             coordinator_id += 1;
         }
@@ -254,11 +300,15 @@ impl Handler<Init> for Main {
                                 provider.do_send(FindSynonyms(word.to_string()));
                             }
                         }
-                        Err(error) => { panic!("{}", error) }
+                        Err(error) => {
+                            panic!("{}", error)
+                        }
                     };
                 }
             }
-            Err(error) => { panic!("Couldn't read {}, error: {}", _msg.filename, error) }
+            Err(error) => {
+                panic!("Couldn't read {}, error: {}", _msg.filename, error)
+            }
         }
     }
 }
@@ -270,30 +320,29 @@ impl Handler<ProviderFinished> for Main {
         self.num_processed_words += 1;
 
         if self.num_words * self.num_providers == self.num_processed_words {
-            self.result_addr.do_send(Finish()); // Condicion de corte
+            self.result_addr.do_send(Finish); // Condicion de corte
         }
     }
 }
-
 
 pub fn start_actors(filename: &String, max_requests: usize, min_wait_millis: u64) {
     file_logger::log("Actors solution starting");
     let system = System::new(); // Creates an Arbitrer where the actors will be running on
     system.block_on(async {
-
         // With SyncArbitrer, these actors will have it's different arbitrer and consequently
         // run in separate threads
         let logger_addr = SyncArbiter::start(1, move || Logger {});
         let logger_addr_cloned = logger_addr.clone();
 
         let requester_addr = SyncArbiter::start(max_requests, move || HttpRequester {
-            logger_addr: logger_addr_cloned.clone()
+            logger_addr: logger_addr_cloned.clone(),
         });
 
         let result_addr = GlobalResult {
             synonyms: HashMap::new(),
-            logger_addr: logger_addr.clone()
-        }.start();
+            logger_addr: logger_addr.clone(),
+        }
+        .start();
 
         let main_addr = Main {
             num_words: 0,
@@ -303,9 +352,13 @@ pub fn start_actors(filename: &String, max_requests: usize, min_wait_millis: u64
             requester_addr,
             logger_addr,
             providers_addr: vec![],
-        }.start();
+        }
+        .start();
 
-        main_addr.do_send(Init { filename: filename.to_string(), min_wait: min_wait_millis });
+        main_addr.do_send(Init {
+            filename: filename.to_string(),
+            min_wait: min_wait_millis,
+        });
     });
 
     system.run().unwrap();

@@ -3,9 +3,7 @@ pub fn raw_response_to_synonyms(body_to_scrap: String) -> Result<Vec<String>, St
         return Ok(Vec::new());
     }
 
-    let synonyms: Vec<String> = body_to_scrap
-        .split("mw-list")
-        .collect::<Vec<&str>>()[1]
+    let synonyms: Vec<String> = body_to_scrap.split("mw-list").collect::<Vec<&str>>()[1]
         .split("/thesaurus/")
         .collect::<Vec<&str>>()
         .iter()
@@ -19,7 +17,7 @@ pub fn raw_response_to_synonyms(body_to_scrap: String) -> Result<Vec<String>, St
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::{read_to_string}, path::Path};
+    use std::{fs::read_to_string, path::Path};
 
     use super::*;
     #[test]

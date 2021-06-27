@@ -52,7 +52,7 @@ Luego del detalle de los principales componentes, pasamos a describir las caract
 - Luego de recibir el mensaje *Init*, el actor **Main** instancia un **Provider** de cada tipo, junto con el **ProviderCoordinator** que le corresponda. De esta forma, cada **Provider** de cada tipo tiene su propio **ProviderCoordinator**.
 - Luego de instanciar los proveedores, parsea el archivo de palabras y envia un mensaje *FindSynonyms* a cada proveedor que tenga para indicarle que debe buscar los sinonimos de esa palabra.
 - Para comenzar, cada **Provider** necesita del material para parsear. Entonces, envia el mensaje *SendRequest* al **HttpProvider**, utilizando a su **ProviderCoordinator** como "middleware" en la operación.
-  - La tarea del coodirnador es entonces, hacer de mediador entre el provider y el requester para coordinar los tiempos minimos entre requests para cada proveedor.
+  - La tarea del coordinador es entonces, hacer de mediador entre el provider y el requester para coordinar los tiempos minimos entre requests para cada proveedor.
   - La forma de hacerlo es frenando al Coordinator por un tiempo `MIN_TIME_BEWTWEEN_REQUESTS` de recibir nuevos eventos, y simplemente luego reenviar el mensaje al **HttpRequester**.
 - Al recibir el mensaje *SendRequest*, el requester efectua la petición al proveedor indicado, y devuelve la respuesta a la dirección del provider que lo haya solicitado.
 - Cuando el provider reciba la respuesta, parsea el HTML del contenido (segun las reglas establecidas para cada proveedor), y envia al **GlobalResult** la lista de sinonimos encontrados. Por último, envia el mensaje *ProviderFinished* al actor **Main** para indicarle que ha finalizado su tarea.

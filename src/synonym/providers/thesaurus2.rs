@@ -1,5 +1,4 @@
-pub fn raw_response_to_synonyms(raw_response: String)
- -> Result<Vec<String>, String> {
+pub fn raw_response_to_synonyms(raw_response: String) -> Result<Vec<String>, String> {
     if raw_response.contains("0 results for") {
         return Ok(Vec::new());
     }
@@ -17,7 +16,7 @@ pub fn raw_response_to_synonyms(raw_response: String)
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::{read_to_string}, path::Path};
+    use std::{fs::read_to_string, path::Path};
 
     use super::*;
     #[test]
