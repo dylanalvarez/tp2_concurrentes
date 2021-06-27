@@ -9,7 +9,20 @@
 El objetivo de este informe será presentar y detallar las soluciones implementadas por el grupo 1 para la construcción del trabajo práctico 2, el cuál consistió en implementar un buscador de sinónimos de palabras utilizando distintos proveedores de información en la web, mediante el uso del lenguaje de Rust, sus distintas alternativas para manejar concurrencia y librerias.
 
 ## Solución A - "Sin Actores"
+Para la solucion A (a la que decidimos llamar "sin actores") lo que intentamos hacer fue aplicar la mayor cantidad y variedad de las herramientas de manejo de concurrencia vistas en clase, como *Semaforos, Canales, Condvars y Mutex*. A continuacion, el detalle del programa.
 
+- Para lo que son los "proveedores" de sinonimos (Thesaurus, Thesaurus2 y Merriam-Webster), para cada uno de ellos creamos un thread que realiza las siguientes tareas:
+  - Lee el archivo de input de palabras
+  - Por cada palabra a buscarle los sinonimos, se crea un thread que hace el trabajo de hacer el request HTTP, parsear esa respuesta, obtener los sinonimos y luego enviarlos a traves de un *canal* al thread que recolecta los resultados (lo veremos en los siguientes puntos). Cada uno de estos threads lanzados se almacenan en una lista.
+- Para la recolección de los resultados finales, lanzamos un thread al que denominamos `result_builder` el cual recibe a traves del canal que mencionamos antes los resultados de los distintos proveedores ejecutados, y los almacena en una estructura de tipo hash llevando el conteo de las repeticiones de cada sinonimo. Además, cuando ya no queden threads de tipo "providers" ejecutandose, el `result_builder` recibira un mensaje indicando que ya no hay mas sinonimos, y que debe entonces devolver el resultado final.
+- Para lo que es el manejo de la *cantidad maxima de requests concurrentes* que se pueden realizar a los distintos sitios, utilizamos un **semaforo** inicializado con el parametro enviado por linea de comandos en donde, previo a hacer el request, los providers hacen el `semaphore.acquire()` necesario, y posteriormente a obtener la respuesta de parte del sitio que corresponda realizan el `semaphore.release()` que corresponde.
+- Para lo que es el manejo del *tiempo minimo entre requests del mismo provider*, nuestra solución propuesta incluye la utilizacion de una **Condvar** (con su **Mutex**) correspondiente, en donde cada provider, previo a parsear el archivo de sinonimos, lanza un thread que denominaremos `sleeper` cuya funcion es recibir una alerta de algun provider que quiera buscar un sinonimo (a traves de un **canal**), y el `sleeper` efectuará un `sleep` del *tiempo minimo entre requests* y notificara a los proveedores que estan esperando que se ha cumplido este tiempo, utilizando la variable condicional mencionada anteriormente. Por si parte, los providers no avanzaran en el proceso de efectuar el request HTTP al sitio que le corresponda hasta tanto no obtener el mutex de la variable condicional, y que el valor de dicha variable sea el indicado (simplemente, un booleano en `true` en nuestro caso).
+- Para lo que se trata del registro de sucesos a traves de un archivo de output, lo que implementamos fue un thread denominado `logger` que recibe mensajes a traves de un **canal** (cuya referencia 'sender' esta compartida por todos los demas threads) y los deposita en el archivo de output.
+- Para finalizar, el thread "main" de la aplicacion, luego de lanzar todos los threads indicados procede a:
+  - Hacer un `join` a todos los providers lanzados hasta que finalicen con su tarea
+  - Enviar un mensaje al `result_builder` para indicarle que ya finalizaron todos los providers (mensaje del tipo `NoMoreSynonyms`)
+  - Hacer un `join` al `result_builder` para obtener el resultado e imprimirlo.
+  - En el proceso, utilizar al `logger` para dejar registros del flujo de la aplicacion.
 ## Solución B - "Con Actores"
 
 En esta sección explicaremos los detalles mas importantes de esta solución B, donde como herramienta principal de manejo de concurrencia utilizamos el modelo de **Actores**, provistos por la libreria *actix*. A continuación, un gráfico de soporte para entender la arquitectura básica y el modelo de actores implementados en esta sección:
@@ -58,3 +71,13 @@ Luego del detalle de los principales componentes, pasamos a describir las caract
 - Cuando el provider reciba la respuesta, parsea el HTML del contenido (segun las reglas establecidas para cada proveedor), y envia al **GlobalResult** la lista de sinonimos encontrados. Por último, envia el mensaje *ProviderFinished* al actor **Main** para indicarle que ha finalizado su tarea.
 - El actor **Main** lleva el conteo de la cantidad de **Providers** que hayan finalizado su tarea de busqueda de sinonimos. Cuando todos hayan terminado de buscar los sinonimos de todas las palabras, envia el mensaje final *Finish* al **GlobalResult** para que devuelva como output el resultado final.
   - Al recibir el mensaje *Finish*, el actor **GlobalResult** envía un mensaje final al **Logger** con la función `send()` a diferencia de los demás que se ejecutaban con `try_send()`. Esto hace que se espere por la respuesta del **Logger**, lo cual es necesario ya que si no se esperara, podría ocurrir que el **GlobalResult** finalice la ejecución con `System::current().stop()` antes de que el **Logger** terminara de procesar los mensajes en su casilla.
+
+
+## Conclusiones
+
+Con el desarrollo del presente trabajo práctico, hemos puesto en práctica la mayoria de los conceptos y herramientas vistas durante el curso de la materia hasta el momento, de los cuales podemos destacar:
+
+- La utilizacion de Rust como lenguaje de programacion, junto con sus librerias estándar y otras (como `reqwest` o `actix`) para lograr el manejo de la concurrencia.
+- El empleo de herramientas de manejo de concurrencia básicas como ser *Semaforos, Condvars, Mutexes y Canales* durante la ejecucion de un programa multi-thread para lograr la coodinacion entre ellos.
+- El empleo de un modelo orientado en *Actores y Mensajes* como opción alternativa de herramienta de manejo de concurrencia.
+- Conceptos y técnicas básicas de programacion en Rust, como ser estructuracion de un programa en Rust, escritura en archivos, efectuar consultas HTTP a traves de la web, y hasta testing.
