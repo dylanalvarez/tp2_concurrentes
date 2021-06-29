@@ -177,7 +177,6 @@ pub fn without_actors(
         Ok(result) => match result {
             Ok(result) => {
                 handle_log(&log_sender, format!("[Main] Final result {:?}", result));
-                println!("{:?}", result)
             }
             Err(result_builder_error) => {
                 println!("{:?}", result_builder_error)

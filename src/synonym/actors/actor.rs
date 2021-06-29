@@ -107,10 +107,11 @@ impl Handler<SendRequest> for ProviderCoordinator {
     type Result = ();
 
     fn handle(&mut self, msg: SendRequest, ctx: &mut Self::Context) -> Self::Result {
+        let cloned_word = msg.word.clone();
         self.logger_addr.do_send(Log {
             content: format!(
-                "Handle SendRequest on ProviderCoordinator ID = {} - URL = {}",
-                self.id, msg.url
+                "Handle SendRequest on ProviderCoordinator ID = {} - URL = {} - Word = {}",
+                self.id, msg.url, cloned_word
             ),
         });
         let min_wait_millis = Duration::from_millis(self.min_wait_millis_between_requests);
@@ -125,9 +126,10 @@ impl Handler<SendRequest> for HttpRequester {
 
     fn handle(&mut self, msg: SendRequest, _ctx: &mut Self::Context) -> Self::Result {
         self.logger_addr.do_send(Log {
-            content: format!("Handle SendRequest for word {} on HttpRequester", msg.word),
+            content: format!("Handle SendRequest for word {} and URL {} on HttpRequester", msg.word, msg.url),
         });
         let cloned_word = msg.word.clone();
+        let cloned_url = msg.url.clone();
         let raw_response = http_requester::fetch_synonyms_raw_response(msg.word, msg.url);
         match raw_response {
             Err(error) => {
@@ -136,8 +138,8 @@ impl Handler<SendRequest> for HttpRequester {
             Ok(result) => {
                 self.logger_addr.do_send(Log {
                     content: format!(
-                        "Sending RequestResult for synonyms of {}",
-                        cloned_word.clone()
+                        "Sending RequestResult for synonyms of {} from URL {}",
+                        cloned_word.clone(), cloned_url
                     ),
                 });
                 msg.provider_addr.do_send(RequestResult {

@@ -14,6 +14,7 @@ pub enum SleeperMessage {
 fn main() {
     file_logger::log("Starting...");
     let args: Vec<String> = env::args().collect();
+    file_logger::log(format!("Received arguments: {:?}", args).as_str());
 
     if let (
         Some(option),
@@ -48,7 +49,7 @@ fn main() {
         }
     } else {
         panic!(
-            "Required args: option max_concurrent_requests min_seconds_between_requests filename"
+            "Required args: option max_concurrent_requests min_seconds_between_requests filename. Try: cargo run actors 2 1 words.txt"
         );
     }
 }

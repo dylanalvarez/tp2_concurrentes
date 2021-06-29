@@ -4,6 +4,16 @@
 * Botalla, Tomas
 * Alvarez, Dylan
 
+## Ejecución
+El programa recibe 4 parámetros de entrada:
+- **option**: con cual de las soluciones hacer la búsqueda. Valores posibles: *actors* / *without_actors* 
+- **max_concurrent_requests**: cantidad máxima de requests HTTP a procesar en forma concurrente para todos los sitios
+- **min_seconds_between_requests**: tiempo mínimo de espera entre dos requests HTTP sucesivos para un sitio dado
+- **filename**: nombre del archivo que contiene las palabras a buscar
+
+Por ejemplo para ejecutar la solución con el modelo de actores, con a lo sumo 2 requests en forma paralela, un tiempo mínimo de 1 segundo entre requests para un mismo proveedor, y dado un archivo de entrada words.txt:
+> cargo run actors 2 1 words.txt
+
 ## Enunciado
 
 #### Fecha de entrega: 29 de junio antes de las 19 hs.
