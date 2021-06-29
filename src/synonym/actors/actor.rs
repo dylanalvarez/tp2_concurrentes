@@ -126,7 +126,10 @@ impl Handler<SendRequest> for HttpRequester {
 
     fn handle(&mut self, msg: SendRequest, _ctx: &mut Self::Context) -> Self::Result {
         self.logger_addr.do_send(Log {
-            content: format!("Handle SendRequest for word {} and URL {} on HttpRequester", msg.word, msg.url),
+            content: format!(
+                "Handle SendRequest for word {} and URL {} on HttpRequester",
+                msg.word, msg.url
+            ),
         });
         let cloned_word = msg.word.clone();
         let cloned_url = msg.url.clone();
@@ -139,7 +142,8 @@ impl Handler<SendRequest> for HttpRequester {
                 self.logger_addr.do_send(Log {
                     content: format!(
                         "Sending RequestResult for synonyms of {} from URL {}",
-                        cloned_word.clone(), cloned_url
+                        cloned_word.clone(),
+                        cloned_url
                     ),
                 });
                 msg.provider_addr.do_send(RequestResult {
@@ -180,7 +184,10 @@ impl Handler<FindSynonyms> for Provider {
     fn handle(&mut self, _msg: FindSynonyms, _ctx: &mut Context<Self>) -> Self::Result {
         let word = _msg.0;
         self.logger_addr.do_send(Log {
-            content: format!("Handle FindSynonyms on Provider {} for word {}", self.provider_type, word),
+            content: format!(
+                "Handle FindSynonyms on Provider {} for word {}",
+                self.provider_type, word
+            ),
         });
 
         let base_url = match self.provider_type {
